@@ -23,7 +23,7 @@ type Node struct {
 }
 
 func NewNode(ctx context.Context, cfg *config.Config) (*Node, error) {
-	priv, _, err := crypto.GenerateKeyPairWithReader(crypto.RSA, 2048, rand.Reader)
+	priv, _, err := crypto.GenerateKeyPairWithReader(crypto.Ed25519, -1, rand.Reader)
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate key pair: %w", err)
 	}

@@ -3,6 +3,8 @@ package discovery
 import (
 	"context"
 	"fmt"
+	"github.com/libp2p/go-libp2p/core/network"
+	"time"
 
 	dht "github.com/libp2p/go-libp2p-kad-dht"
 	"github.com/libp2p/go-libp2p/core/host"
@@ -55,20 +57,63 @@ func (d *DHT) ConnectToBootstrapPeers(ctx context.Context, bootstrapPeers []stri
 	}
 
 	for _, addr := range bootstrapPeers {
-		maddr, err := multiaddr.NewMultiaddr(addr)
-		if err != nil {
-			return fmt.Errorf("invalid bootstrap peer address: %w", err)
-		}
-		peerinfo, err := peer.AddrInfoFromP2pAddr(maddr)
-		if err != nil {
-			return fmt.Errorf("failed to get peer info: %w", err)
-		}
-		if err := d.host.Connect(ctx, *peerinfo); err != nil {
-			fmt.Printf("Failed to connect to bootstrap peer %s: %v\n", addr, err)
+		if err := d.connectWithRetry(ctx, addr); err != nil {
+			fmt.Printf("Failed to connect to bootstrap peer %s after retries: %v\n", addr, err)
 			// Continue trying to connect to other peers
 			continue
 		}
 		fmt.Printf("Connected to bootstrap peer: %s\n", addr)
 	}
+	return nil
+}
+
+func (d *DHT) connectWithRetry(ctx context.Context, addr string) error {
+	backoff := time.Second
+	maxRetries := 3
+
+	for i := 0; i < maxRetries; i++ {
+		err := d.connectToPeer(ctx, addr)
+		if err == nil {
+			return nil
+		}
+
+		fmt.Printf("Attempt %d: Failed to connect to %s: %v\n", i+1, addr, err)
+
+		select {
+		case <-time.After(backoff):
+			backoff *= 2 // exponential backoff
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+	}
+
+	return fmt.Errorf("failed to connect after %d attempts", maxRetries)
+}
+
+func (d *DHT) connectToPeer(ctx context.Context, addr string) error {
+	maddr, err := multiaddr.NewMultiaddr(addr)
+	if err != nil {
+		return fmt.Errorf("invalid bootstrap peer address: %w", err)
+	}
+
+	peerinfo, err := peer.AddrInfoFromP2pAddr(maddr)
+	if err != nil {
+		return fmt.Errorf("failed to get peer info: %w", err)
+	}
+
+	// Check if already connected
+	if d.host.Network().Connectedness(peerinfo.ID) == network.Connected {
+		fmt.Printf("Already connected to peer: %s\n", addr)
+		return nil
+	}
+
+	// Set a timeout for the connection attempt
+	ctxTimeout, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+
+	if err := d.host.Connect(ctxTimeout, *peerinfo); err != nil {
+		return fmt.Errorf("connection failed: %w", err)
+	}
+
 	return nil
 }
