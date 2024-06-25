@@ -1,15 +1,12 @@
 package node
 
 import (
+	"Fogbusv3/pkg/config"
+	"Fogbusv3/pkg/discovery"
 	"context"
 	"crypto/rand"
 	"fmt"
-	"github.com/libp2p/go-libp2p/p2p/muxer/yamux"
 	"github.com/libp2p/go-libp2p/p2p/security/noise"
-	"github.com/libp2p/go-libp2p/p2p/transport/tcp"
-
-	"Fogbusv3/pkg/config"
-	"Fogbusv3/pkg/discovery"
 
 	"github.com/libp2p/go-libp2p"
 	"github.com/libp2p/go-libp2p/core/crypto"
@@ -48,8 +45,7 @@ func NewNode(ctx context.Context, cfg *config.Config) (*Node, error) {
 		libp2p.ListenAddrs(sourceMultiAddr),
 		libp2p.Identity(priv),
 		libp2p.Security(noise.ID, noise.New),
-		libp2p.Transport(tcp.NewTCPTransport),
-		libp2p.Muxer("/yamux/1.0.0", yamux.DefaultTransport),
+		libp2p.EnableRelay(),
 	)
 
 	if err != nil {
