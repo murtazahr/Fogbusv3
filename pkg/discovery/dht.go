@@ -109,7 +109,7 @@ func (d *DHT) connectToPeer(ctx context.Context, addr string) error {
 	}
 
 	// Set a timeout for the connection attempt
-	ctxTimeout, cancel := context.WithTimeout(ctx, 10*time.Second)
+	ctxTimeout, cancel := context.WithTimeout(ctx, 60*time.Second)
 	defer cancel()
 
 	log.Printf("Attempting to connect to peer: %s", peerinfo.ID)
