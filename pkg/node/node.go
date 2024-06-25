@@ -5,7 +5,6 @@ import (
 	"Fogbusv3/pkg/discovery"
 	"context"
 	"fmt"
-	"github.com/libp2p/go-libp2p/p2p/security/noise"
 	"log"
 
 	"github.com/libp2p/go-libp2p"
@@ -51,7 +50,7 @@ func NewNode(ctx context.Context, cfg *config.Config) (*Node, error) {
 	h, err := libp2p.New(
 		libp2p.ListenAddrs(sourceMultiAddr),
 		libp2p.Identity(priv),
-		libp2p.Security(noise.ID, noise.New),
+		libp2p.DefaultSecurity,
 		libp2p.EnableRelay(),
 		libp2p.NATPortMap(),
 	)
