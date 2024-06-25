@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"github.com/libp2p/go-libp2p/core/network"
+	"log"
 	"time"
 
 	dht "github.com/libp2p/go-libp2p-kad-dht"
@@ -111,6 +112,7 @@ func (d *DHT) connectToPeer(ctx context.Context, addr string) error {
 	ctxTimeout, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
 
+	log.Printf("Attempting to connect to peer: %s", peerinfo.ID)
 	if err := d.host.Connect(ctxTimeout, *peerinfo); err != nil {
 		return fmt.Errorf("connection failed: %w", err)
 	}

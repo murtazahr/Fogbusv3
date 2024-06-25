@@ -4,9 +4,9 @@ import (
 	"Fogbusv3/pkg/config"
 	"Fogbusv3/pkg/discovery"
 	"context"
-	"crypto/rand"
 	"fmt"
 	"github.com/libp2p/go-libp2p/p2p/security/noise"
+	"log"
 
 	"github.com/libp2p/go-libp2p"
 	"github.com/libp2p/go-libp2p/core/crypto"
@@ -23,10 +23,17 @@ type Node struct {
 }
 
 func NewNode(ctx context.Context, cfg *config.Config) (*Node, error) {
-	priv, _, err := crypto.GenerateKeyPairWithReader(crypto.Ed25519, -1, rand.Reader)
+	priv, _, err := crypto.GenerateKeyPair(
+		crypto.Ed25519,
+		-1,
+	)
 	if err != nil {
-		return nil, fmt.Errorf("failed to generate key pair: %w", err)
+		log.Fatal(err)
 	}
+
+	pubKey := priv.GetPublic()
+	peerID, _ := peer.IDFromPublicKey(pubKey)
+	log.Printf("Peer ID: %s", peerID)
 
 	sourceMultiAddr, err := multiaddr.NewMultiaddr(cfg.ListenAddr)
 	if err != nil {
@@ -46,6 +53,7 @@ func NewNode(ctx context.Context, cfg *config.Config) (*Node, error) {
 		libp2p.Identity(priv),
 		libp2p.Security(noise.ID, noise.New),
 		libp2p.EnableRelay(),
+		libp2p.NATPortMap(),
 	)
 
 	if err != nil {
