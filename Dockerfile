@@ -8,7 +8,7 @@ RUN go mod download
 
 COPY . .
 
-RUN go build -o /Fogbusv3 ./cmd/node
+RUN go build -o /Fogbusv3 ./cmd/node/main.go
 
 EXPOSE 8080
 
