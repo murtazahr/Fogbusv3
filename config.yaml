@@ -1,0 +1,11 @@
+fabric:
+  networkName: "my-network"
+  channelName: "mychannel"
+  chaincodeID: "mycc"
+  mspID: "Org1MSP"
+  user:
+    name: "User1"
+    secret: "User1pw"
+  connectionProfile: "./connection-profile.yaml"
+  caURL: "https://ca.org1.example.com:7054"
+  caName: "ca.org1.example.com"

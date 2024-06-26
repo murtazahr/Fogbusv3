@@ -1,11 +1,9 @@
 package discovery
 
 import (
+	"Fogbusv3/pkg/blockchain"
 	"context"
 	"fmt"
-	"github.com/libp2p/go-libp2p/core/network"
-	"log"
-	"time"
 
 	dht "github.com/libp2p/go-libp2p-kad-dht"
 	"github.com/libp2p/go-libp2p/core/host"
@@ -22,7 +20,6 @@ func NewDHT(ctx context.Context, h host.Host, bootstrapPeers []string) (*DHT, er
 	var options []dht.Option
 
 	if len(bootstrapPeers) == 0 {
-		// If no bootstrap peers, run in server mode
 		options = append(options, dht.Mode(dht.ModeServer))
 	}
 
@@ -31,90 +28,63 @@ func NewDHT(ctx context.Context, h host.Host, bootstrapPeers []string) (*DHT, er
 		return nil, fmt.Errorf("failed to create DHT: %w", err)
 	}
 
-	d := &DHT{
+	return &DHT{
 		kadDHT: kadDHT,
 		host:   h,
-	}
-
-	return d, nil
+	}, nil
 }
 
 func (d *DHT) Start(ctx context.Context) error {
-	if err := d.kadDHT.Bootstrap(ctx); err != nil {
-		return fmt.Errorf("failed to bootstrap DHT: %w", err)
-	}
-
 	return nil
+}
+
+func (d *DHT) Bootstrap(ctx context.Context) error {
+	return d.kadDHT.Bootstrap(ctx)
 }
 
 func (d *DHT) Stop() error {
 	return d.kadDHT.Close()
 }
 
-func (d *DHT) ConnectToBootstrapPeers(ctx context.Context, bootstrapPeers []string) error {
-	if len(bootstrapPeers) == 0 {
-		fmt.Println("No bootstrap peers provided. Running as a bootstrap node.")
-		return nil
+func (d *DHT) UpdateBootstrapPeers(ctx context.Context, fabricClient *blockchain.FabricClient) error {
+	bootstrapPeers, err := fabricClient.GetBootstrapPeers()
+	if err != nil {
+		return fmt.Errorf("failed to get bootstrap peers from blockchain: %v", err)
 	}
 
+	var peerInfos []peer.AddrInfo
+	var unreachablePeers []string
 	for _, addr := range bootstrapPeers {
-		if err := d.connectWithRetry(ctx, addr); err != nil {
-			fmt.Printf("Failed to connect to bootstrap peer %s after retries: %v\n", addr, err)
-			// Continue trying to connect to other peers
+		maddr, err := multiaddr.NewMultiaddr(addr)
+		if err != nil {
+			fmt.Printf("Invalid bootstrap peer address %s: %v\n", addr, err)
+			unreachablePeers = append(unreachablePeers, addr)
 			continue
 		}
-		fmt.Printf("Connected to bootstrap peer: %s\n", addr)
-	}
-	return nil
-}
-
-func (d *DHT) connectWithRetry(ctx context.Context, addr string) error {
-	backoff := time.Second
-	maxRetries := 3
-
-	for i := 0; i < maxRetries; i++ {
-		err := d.connectToPeer(ctx, addr)
-		if err == nil {
-			return nil
+		peerInfo, err := peer.AddrInfoFromP2pAddr(maddr)
+		if err != nil {
+			fmt.Printf("Failed to get peer info from address %s: %v\n", addr, err)
+			unreachablePeers = append(unreachablePeers, addr)
+			continue
 		}
-
-		fmt.Printf("Attempt %d: Failed to connect to %s: %v\n", i+1, addr, err)
-
-		select {
-		case <-time.After(backoff):
-			backoff *= 2 // exponential backoff
-		case <-ctx.Done():
-			return ctx.Err()
+		if err := d.host.Connect(ctx, *peerInfo); err != nil {
+			fmt.Printf("Failed to connect to bootstrap peer %s: %v\n", addr, err)
+			unreachablePeers = append(unreachablePeers, addr)
+			continue
 		}
+		peerInfos = append(peerInfos, *peerInfo)
 	}
 
-	return fmt.Errorf("failed to connect after %d attempts", maxRetries)
-}
-
-func (d *DHT) connectToPeer(ctx context.Context, addr string) error {
-	maddr, err := multiaddr.NewMultiaddr(addr)
-	if err != nil {
-		return fmt.Errorf("invalid bootstrap peer address: %w", err)
+	if err := d.kadDHT.Bootstrap(ctx); err != nil {
+		return fmt.Errorf("failed to bootstrap DHT: %v", err)
 	}
 
-	peerinfo, err := peer.AddrInfoFromP2pAddr(maddr)
-	if err != nil {
-		return fmt.Errorf("failed to get peer info: %w", err)
-	}
-
-	// Check if already connected
-	if d.host.Network().Connectedness(peerinfo.ID) == network.Connected {
-		fmt.Printf("Already connected to peer: %s\n", addr)
-		return nil
-	}
-
-	// Set a timeout for the connection attempt
-	//ctxTimeout, cancel := context.WithTimeout(ctx, 60*time.Second)
-	//defer cancel()
-
-	log.Printf("Attempting to connect to peer: %s", peerinfo.ID)
-	if err := d.host.Connect(context.Background(), *peerinfo); err != nil {
-		return fmt.Errorf("connection failed: %w", err)
+	if len(unreachablePeers) > 0 {
+		for _, p := range unreachablePeers {
+			if err := fabricClient.RemoveBootstrapPeer(p); err != nil {
+				fmt.Printf("Failed to remove unreachable bootstrap p %s: %v\n", p, err)
+			}
+		}
 	}
 
 	return nil
